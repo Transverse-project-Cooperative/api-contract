@@ -1,0 +1,253 @@
+openapi: 3.1.0
+info:
+  title: Contrat d'interface NoCode / Tech Lead · Réseau BIAM
+  version: 0.1.0
+  description: |
+    Brouillon. Version co-signée attendue au jalon J3.
+    Flux : référentiel contractuel (NoCode → Tech Lead), stocks et consommation,
+    livraisons (Tech Lead → NoCode), webhook de nouveau tarif (NoCode → Tech Lead).
+servers:
+  - url: http://127.0.0.1:4010
+    description: Mock (Prism)
+  - url: https://A-DEFINIR.supabase.co/functions/v1
+    description: API réelle NoCode (référentiel)
+  - url: https://A-DEFINIR.cloudfunctions.net/api/v1
+    description: API réelle Tech Lead (stocks, livraisons)
+security:
+  - apiKey: []
+tags:
+  - name: Référentiel contractuel
+    description: Produit par NoCode (Supabase), consommé par Tech Lead
+  - name: Stocks et consommation
+    description: Produit par Tech Lead (Firebase), consommé par NoCode
+  - name: Livraisons
+    description: Produit par Tech Lead (Firebase), consommé par NoCode
+paths:
+  /fournisseurs:
+    get:
+      operationId: listerFournisseurs
+      tags: [Référentiel contractuel]
+      summary: Liste des fournisseurs retenus
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Fournisseur' } }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/NonAutorise' }
+  /tarifs:
+    get:
+      operationId: listerTarifs
+      tags: [Référentiel contractuel]
+      summary: Tarifs négociés en vigueur (uniquement issus d'un contrat signé)
+      parameters:
+        - in: query
+          name: fournisseurId
+          schema: { type: string }
+        - in: query
+          name: dateEffet
+          description: Date à laquelle le tarif doit être en vigueur (défaut aujourd'hui)
+          schema: { type: string, format: date }
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Tarif' } }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/NonAutorise' }
+  /stocks:
+    get:
+      operationId: listerStocks
+      tags: [Stocks et consommation]
+      summary: Niveaux de stock par article, par brasserie et consolidés réseau
+      parameters:
+        - in: query
+          name: brasserieId
+          description: Absent = consolidé à l'échelle du réseau
+          schema: { type: string }
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/NiveauStock' } }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/NonAutorise' }
+  /consommations:
+    get:
+      operationId: listerConsommations
+      tags: [Stocks et consommation]
+      summary: Consommation par article et par période
+      parameters:
+        - in: query
+          name: du
+          required: true
+          schema: { type: string, format: date }
+        - in: query
+          name: au
+          required: true
+          schema: { type: string, format: date }
+        - in: query
+          name: granularite
+          schema: { type: string, enum: [jour, semaine, mois], default: mois }
+        - in: query
+          name: brasserieId
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Consommation' } }
+        '400': { $ref: '#/components/responses/RequeteInvalide' }
+        '401': { $ref: '#/components/responses/NonAutorise' }
+  /livraisons/fiabilite:
+    get:
+      operationId: fiabiliteLivraisons
+      tags: [Livraisons]
+      summary: Retards et conformité des livraisons par fournisseur
+      parameters:
+        - in: query
+          name: du
+          schema: { type: string, format: date }
+        - in: query
+          name: au
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/FiabiliteFournisseur' } }
+        '401': { $ref: '#/components/responses/NonAutorise' }
+webhooks:
+  nouveauTarif:
+    post:
+      operationId: recevoirNouveauTarif
+      summary: Émis par NoCode à chaque nouveau tarif en vigueur (émission optionnelle, Tech Lead relit aussi /tarifs périodiquement)
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Tarif' }
+      responses:
+        '204': { description: Reçu }
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Une clé par équipe, stockée hors du code et des configurations partagées.
+  parameters:
+    page:
+      in: query
+      name: page
+      schema: { type: integer, minimum: 1, default: 1 }
+    limit:
+      in: query
+      name: limit
+      schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+  responses:
+    NonAutorise:
+      description: Clé absente ou invalide
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Erreur' }
+    RequeteInvalide:
+      description: Paramètres invalides
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Erreur' }
+  schemas:
+    Erreur:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, example: PARAMETRE_INVALIDE }
+        message: { type: string }
+        details: { type: object }
+    Pagination:
+      type: object
+      properties:
+        page: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+    Fournisseur:
+      type: object
+      required: [id, nom]
+      properties:
+        id: { type: string }
+        nom: { type: string }
+        categories: { type: array, items: { type: string }, example: [malt, houblon] }
+        conditionsPaiement: { type: string, example: "30 jours fin de mois" }
+    Tarif:
+      type: object
+      required: [id, fournisseurId, articleId, prixUnitaireHT, unite, dateEffet]
+      properties:
+        id: { type: string }
+        fournisseurId: { type: string }
+        articleId: { type: string }
+        libelleArticle: { type: string, example: "Malt Pilsen 25 kg" }
+        prixUnitaireHT: { type: number, example: 28.5 }
+        unite: { type: string, example: sac }
+        minimumCommande: { type: number, example: 40 }
+        paliers:
+          type: array
+          items:
+            type: object
+            properties:
+              aPartirDe: { type: number }
+              prixUnitaireHT: { type: number }
+        delaiLivraisonJours: { type: integer, example: 5 }
+        dateEffet: { type: string, format: date }
+        dateFin: { type: [string, "null"], format: date }
+        contratId: { type: string }
+    NiveauStock:
+      type: object
+      properties:
+        brasserieId: { type: [string, "null"] }
+        articleId: { type: string }
+        quantite: { type: number }
+        unite: { type: string }
+        seuilMinimum: { type: number }
+        misAJourLe: { type: string, format: date-time }
+    Consommation:
+      type: object
+      properties:
+        brasserieId: { type: [string, "null"] }
+        articleId: { type: string }
+        periode: { type: string, example: "2026-09" }
+        quantite: { type: number }
+        unite: { type: string }
+    FiabiliteFournisseur:
+      type: object
+      properties:
+        fournisseurId: { type: string }
+        nbLivraisons: { type: integer }
+        tauxRetard: { type: number, example: 0.12 }
+        retardMoyenJours: { type: number }
+        tauxConformite: { type: number, example: 0.95 }
