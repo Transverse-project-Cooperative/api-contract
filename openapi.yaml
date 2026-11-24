@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Contrat d'interface NoCode / Tech Lead · Bières des Régions Auvergne-Rhône-Alpes
-  version: 0.1.0
+  version: 0.2.0
   description: |
     Brouillon. Version co-signée attendue au jalon J3.
     Flux : référentiel contractuel (NoCode → Tech Lead), stocks et consommation,
@@ -9,7 +9,7 @@ info:
 servers:
   - url: http://127.0.0.1:4010
     description: Mock (Prism)
-  - url: https://A-DEFINIR.supabase.co/functions/v1
+  - url: https://plghltdifavegrxdeons.supabase.co/functions/v1
     description: API réelle NoCode (référentiel)
   - url: https://A-DEFINIR.cloudfunctions.net/api/v1
     description: API réelle Tech Lead (stocks, livraisons)
@@ -23,9 +23,9 @@ tags:
   - name: Livraisons
     description: Produit par Tech Lead (Firebase), consommé par NoCode
 paths:
-  /fournisseurs:
+  /suppliers:
     get:
-      operationId: listerFournisseurs
+      operationId: listSuppliers
       tags: [Référentiel contractuel]
       summary: Liste des fournisseurs retenus
       parameters:
@@ -39,20 +39,20 @@ paths:
               schema:
                 type: object
                 properties:
-                  data: { type: array, items: { $ref: '#/components/schemas/Fournisseur' } }
+                  data: { type: array, items: { $ref: '#/components/schemas/Supplier' } }
                   pagination: { $ref: '#/components/schemas/Pagination' }
-        '401': { $ref: '#/components/responses/NonAutorise' }
-  /tarifs:
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /tariffs:
     get:
-      operationId: listerTarifs
+      operationId: listTariffs
       tags: [Référentiel contractuel]
       summary: Tarifs négociés en vigueur (uniquement issus d'un contrat signé)
       parameters:
         - in: query
-          name: fournisseurId
+          name: supplierId
           schema: { type: string }
         - in: query
-          name: dateEffet
+          name: effectiveDate
           description: Date à laquelle le tarif doit être en vigueur (défaut aujourd'hui)
           schema: { type: string, format: date }
         - $ref: '#/components/parameters/page'
@@ -65,17 +65,17 @@ paths:
               schema:
                 type: object
                 properties:
-                  data: { type: array, items: { $ref: '#/components/schemas/Tarif' } }
+                  data: { type: array, items: { $ref: '#/components/schemas/Tariff' } }
                   pagination: { $ref: '#/components/schemas/Pagination' }
-        '401': { $ref: '#/components/responses/NonAutorise' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
   /stocks:
     get:
-      operationId: listerStocks
+      operationId: listStocks
       tags: [Stocks et consommation]
       summary: Niveaux de stock par article, par brasserie et consolidés réseau
       parameters:
         - in: query
-          name: brasserieId
+          name: breweryId
           description: Absent = consolidé à l'échelle du réseau
           schema: { type: string }
         - $ref: '#/components/parameters/page'
@@ -88,28 +88,28 @@ paths:
               schema:
                 type: object
                 properties:
-                  data: { type: array, items: { $ref: '#/components/schemas/NiveauStock' } }
+                  data: { type: array, items: { $ref: '#/components/schemas/StockLevel' } }
                   pagination: { $ref: '#/components/schemas/Pagination' }
-        '401': { $ref: '#/components/responses/NonAutorise' }
-  /consommations:
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /consumptions:
     get:
-      operationId: listerConsommations
+      operationId: listConsumptions
       tags: [Stocks et consommation]
       summary: Consommation par article et par période
       parameters:
         - in: query
-          name: du
+          name: from
           required: true
           schema: { type: string, format: date }
         - in: query
-          name: au
+          name: to
           required: true
           schema: { type: string, format: date }
         - in: query
-          name: granularite
-          schema: { type: string, enum: [jour, semaine, mois], default: mois }
+          name: granularity
+          schema: { type: string, enum: [day, week, month], default: month }
         - in: query
-          name: brasserieId
+          name: breweryId
           schema: { type: string }
       responses:
         '200':
@@ -119,20 +119,20 @@ paths:
               schema:
                 type: object
                 properties:
-                  data: { type: array, items: { $ref: '#/components/schemas/Consommation' } }
-        '400': { $ref: '#/components/responses/RequeteInvalide' }
-        '401': { $ref: '#/components/responses/NonAutorise' }
-  /livraisons/fiabilite:
+                  data: { type: array, items: { $ref: '#/components/schemas/Consumption' } }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /deliveries/reliability:
     get:
-      operationId: fiabiliteLivraisons
+      operationId: deliveryReliability
       tags: [Livraisons]
       summary: Retards et conformité des livraisons par fournisseur
       parameters:
         - in: query
-          name: du
+          name: from
           schema: { type: string, format: date }
         - in: query
-          name: au
+          name: to
           schema: { type: string, format: date }
       responses:
         '200':
@@ -142,17 +142,17 @@ paths:
               schema:
                 type: object
                 properties:
-                  data: { type: array, items: { $ref: '#/components/schemas/FiabiliteFournisseur' } }
-        '401': { $ref: '#/components/responses/NonAutorise' }
+                  data: { type: array, items: { $ref: '#/components/schemas/SupplierReliability' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 webhooks:
-  nouveauTarif:
+  newTariff:
     post:
-      operationId: recevoirNouveauTarif
-      summary: Émis par NoCode à chaque nouveau tarif en vigueur (émission optionnelle, Tech Lead relit aussi /tarifs périodiquement)
+      operationId: receiveNewTariff
+      summary: Émis par NoCode à chaque nouveau tarif en vigueur (émission optionnelle, Tech Lead relit aussi /tariffs périodiquement)
       requestBody:
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/Tarif' }
+            schema: { $ref: '#/components/schemas/Tariff' }
       responses:
         '204': { description: Reçu }
 components:
@@ -172,18 +172,18 @@ components:
       name: limit
       schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
   responses:
-    NonAutorise:
+    Unauthorized:
       description: Clé absente ou invalide
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/Erreur' }
-    RequeteInvalide:
+          schema: { $ref: '#/components/schemas/Error' }
+    InvalidRequest:
       description: Paramètres invalides
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/Erreur' }
+          schema: { $ref: '#/components/schemas/Error' }
   schemas:
-    Erreur:
+    Error:
       type: object
       required: [code, message]
       properties:
@@ -196,58 +196,58 @@ components:
         page: { type: integer }
         limit: { type: integer }
         total: { type: integer }
-    Fournisseur:
+    Supplier:
       type: object
-      required: [id, nom]
+      required: [id, name]
       properties:
         id: { type: string }
-        nom: { type: string }
+        name: { type: string }
         categories: { type: array, items: { type: string }, example: [malt, houblon] }
-        conditionsPaiement: { type: string, example: "30 jours fin de mois" }
-    Tarif:
+        paymentTerms: { type: string, example: "30 jours fin de mois" }
+    Tariff:
       type: object
-      required: [id, fournisseurId, articleId, prixUnitaireHT, unite, dateEffet]
+      required: [id, supplierId, articleId, unitPriceExclTax, unit, effectiveDate]
       properties:
         id: { type: string }
-        fournisseurId: { type: string }
+        supplierId: { type: string }
         articleId: { type: string }
-        libelleArticle: { type: string, example: "Malt Pilsen 25 kg" }
-        prixUnitaireHT: { type: number, example: 28.5 }
-        unite: { type: string, example: sac }
-        minimumCommande: { type: number, example: 40 }
-        paliers:
+        articleLabel: { type: string, example: "Malt Pilsen 25 kg" }
+        unitPriceExclTax: { type: number, example: 28.5 }
+        unit: { type: string, example: sac }
+        minimumOrder: { type: number, example: 40 }
+        tiers:
           type: array
           items:
             type: object
             properties:
-              aPartirDe: { type: number }
-              prixUnitaireHT: { type: number }
-        delaiLivraisonJours: { type: integer, example: 5 }
-        dateEffet: { type: string, format: date }
-        dateFin: { type: [string, "null"], format: date }
-        contratId: { type: string }
-    NiveauStock:
+              fromQuantity: { type: number }
+              unitPriceExclTax: { type: number }
+        deliveryLeadTimeDays: { type: integer, example: 5 }
+        effectiveDate: { type: string, format: date }
+        endDate: { type: [string, "null"], format: date }
+        contractId: { type: string }
+    StockLevel:
       type: object
       properties:
-        brasserieId: { type: [string, "null"] }
+        breweryId: { type: [string, "null"] }
         articleId: { type: string }
-        quantite: { type: number }
-        unite: { type: string }
-        seuilMinimum: { type: number }
-        misAJourLe: { type: string, format: date-time }
-    Consommation:
+        quantity: { type: number }
+        unit: { type: string }
+        minimumThreshold: { type: number }
+        updatedAt: { type: string, format: date-time }
+    Consumption:
       type: object
       properties:
-        brasserieId: { type: [string, "null"] }
+        breweryId: { type: [string, "null"] }
         articleId: { type: string }
-        periode: { type: string, example: "2026-09" }
-        quantite: { type: number }
-        unite: { type: string }
-    FiabiliteFournisseur:
+        period: { type: string, example: "2026-09" }
+        quantity: { type: number }
+        unit: { type: string }
+    SupplierReliability:
       type: object
       properties:
-        fournisseurId: { type: string }
-        nbLivraisons: { type: integer }
-        tauxRetard: { type: number, example: 0.12 }
-        retardMoyenJours: { type: number }
-        tauxConformite: { type: number, example: 0.95 }
+        supplierId: { type: string }
+        deliveryCount: { type: integer }
+        delayRate: { type: number, example: 0.12 }
+        averageDelayDays: { type: number }
+        conformityRate: { type: number, example: 0.95 }
